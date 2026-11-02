@@ -26,6 +26,10 @@ folder="$(mktemp -d)"
 trap 'rm -rf "$folder"' EXIT
 curl --fail --silent --show-error --location --retry 3 -o "$folder/$name" "$url/$name"
 curl --fail --silent --show-error --location --retry 3 -o "$folder/checksums.txt" "$url/checksums.txt"
-(cd "$folder" && grep " $name\$" checksums.txt | shasum -a 256 -c -)
+checksum=(shasum -a 256)
+if command -v sha256sum > /dev/null; then
+  checksum=(sha256sum)
+fi
+(cd "$folder" && grep " $name\$" checksums.txt | "${checksum[@]}" -c -)
 chmod +x "$folder/$name"
 "$folder/$name" check --base "$base"
