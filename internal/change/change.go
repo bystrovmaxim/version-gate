@@ -27,11 +27,15 @@ type Input struct {
 }
 
 // Required returns the levels that must grow, or an error for a forbidden change.
-// A nil result with no error means there is nothing to compare, as on adoption.
+// With no root file on main every level counts as new, so the numbers are only validated.
 func Required(in Input) ([]Requirement, error) {
 	root := in.Base.Root()
 	if root == nil {
-		return nil, nil
+		result := make([]Requirement, 0, len(in.Head.Levels))
+		for _, level := range in.Head.Levels {
+			result = append(result, Requirement{Dir: level.Dir, Kind: level.Manifest.Kind, New: true})
+		}
+		return result, nil
 	}
 	if err := in.Head.CheckStandardFiles(in.HeadFiles, root.Untracked); err != nil {
 		return nil, err

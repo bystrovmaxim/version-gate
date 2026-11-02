@@ -10,9 +10,6 @@ import (
 
 const samples = "../../specs/001-version-toml-spec/samples"
 
-// numberSamples need a version comparison, which arrives in phase 8.
-var numberSamples = map[string]bool{"bad-version.toml": true}
-
 func sampleIsRoot(name string) bool {
 	return !strings.HasPrefix(name, "nested-")
 }
@@ -25,7 +22,7 @@ func TestSamples(t *testing.T) {
 		}
 		for _, p := range paths {
 			name := filepath.Base(p)
-			if numberSamples[name] {
+			if name == "bad-version.toml" { // needs a scheme, so package gate judges it
 				continue
 			}
 			t.Run(verdict+"/"+name, func(t *testing.T) {

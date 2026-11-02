@@ -9,6 +9,7 @@ import (
 
 	"github.com/bystrovmaxim/version-gate/internal/change"
 	"github.com/bystrovmaxim/version-gate/internal/driver"
+	"github.com/bystrovmaxim/version-gate/internal/gate"
 	"github.com/bystrovmaxim/version-gate/internal/gitrepo"
 	"github.com/bystrovmaxim/version-gate/internal/manifest"
 )
@@ -42,64 +43,61 @@ func runCheck(args []string, stdout, stderr io.Writer) int {
 		return 2
 	}
 	repo := gitrepo.Repo{Dir: "."}
-	requirements, head, err := required(repo, *baseRef, "HEAD", stdout)
+	failures, err := check(repo, *baseRef, "HEAD", stdout)
 	if err != nil {
 		fmt.Fprintln(stderr, "version-gate:", err)
 		return 1
 	}
-	files, err := repo.Files("HEAD")
-	if err != nil {
-		fmt.Fprintln(stderr, "version-gate:", err)
+	for _, failure := range failures {
+		fmt.Fprintln(stderr, "version-gate:", failure)
+	}
+	if len(failures) > 0 {
 		return 1
 	}
-	source := driver.Source{Files: files, Read: func(path string) ([]byte, error) { return repo.Read("HEAD", path) }}
-	for _, r := range requirements {
-		level, _ := head.Level(r.Dir)
-		number, err := driver.Version(level, source)
-		if err != nil {
-			fmt.Fprintln(stderr, "version-gate:", err)
-			return 1
-		}
-		note := ""
-		if r.New {
-			note = ", new"
-		}
-		fmt.Fprintf(stdout, "must grow: %s %s (now %s%s)\n", r.Kind, r.Dir, number, note)
-	}
+	fmt.Fprintln(stdout, "every required version grew")
 	return 0
 }
 
-// required reads both revisions, prints the tracked levels and works out what must grow.
-func required(repo gitrepo.Repo, base, head string, stdout io.Writer) ([]change.Requirement, *manifest.Tree, error) {
+// check reads both revisions, prints the tracked levels and judges what must grow.
+func check(repo gitrepo.Repo, base, head string, stdout io.Writer) ([]string, error) {
 	fork, err := repo.MergeBase(base, head)
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 	changed, err := repo.Changed(fork, head)
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
-	baseTree, _, err := readTree(repo, base)
+	baseState, err := readState(repo, base)
 	if err != nil {
-		return nil, nil, fmt.Errorf("%s: %w", base, err)
+		return nil, fmt.Errorf("%s: %w", base, err)
 	}
-	headTree, headFiles, err := readTree(repo, head)
+	headState, err := readState(repo, head)
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
-	for _, level := range headTree.Levels {
+	for _, level := range headState.Tree.Levels {
 		fmt.Fprintf(stdout, "tracked: %s %s\n", level.Manifest.Kind, level.Dir)
 	}
-	requirements, err := change.Required(change.Input{Base: baseTree, Head: headTree, HeadFiles: headFiles, Changed: changed})
-	return requirements, headTree, err
+	requirements, err := change.Required(change.Input{
+		Base: baseState.Tree, Head: headState.Tree, HeadFiles: headState.Source.Files, Changed: changed,
+	})
+	if err != nil {
+		return nil, err
+	}
+	return gate.Check(requirements, baseState, headState), nil
 }
 
-// readTree works out the levels at rev.
-func readTree(repo gitrepo.Repo, rev string) (*manifest.Tree, []string, error) {
+// readState works out the levels and files at rev.
+func readState(repo gitrepo.Repo, rev string) (gate.State, error) {
 	files, err := repo.Files(rev)
 	if err != nil {
-		return nil, nil, err
+		return gate.State{}, err
 	}
-	tree, err := manifest.Discover(files, func(path string) ([]byte, error) { return repo.Read(rev, path) })
-	return tree, files, err
+	read := func(path string) ([]byte, error) { return repo.Read(rev, path) }
+	tree, err := manifest.Discover(files, read)
+	if err != nil {
+		return gate.State{}, err
+	}
+	return gate.State{Tree: tree, Source: driver.Source{Files: files, Read: read}}, nil
 }

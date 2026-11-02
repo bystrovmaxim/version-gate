@@ -219,7 +219,7 @@ func TestNewLevelIsMarkedNew(t *testing.T) {
 func TestAdoptionOnlyValidates(t *testing.T) {
 	s := newSandbox(t, map[string]string{"code.py": ""})
 	s.write(map[string]string{"version.toml": root, "code.py": "x"})
-	want(t, s, "")
+	want(t, s, ".")
 }
 
 func TestUntrackedIsReadFromMain(t *testing.T) {
