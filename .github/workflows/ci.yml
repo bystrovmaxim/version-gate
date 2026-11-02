@@ -22,3 +22,15 @@ jobs:
         with:
           go-version-file: go.mod
       - run: bash scripts/check.sh
+
+  version:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - run: go run ./cmd/version-gate check --base "origin/$GITHUB_BASE_REF"

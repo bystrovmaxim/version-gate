@@ -191,3 +191,42 @@ func TestAdoptionPassesAndStillValidatesNumbers(t *testing.T) {
 		t.Fatalf("code = %d", code)
 	}
 }
+
+func TestHelpGoesToStdout(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+	if code := run([]string{"--help"}, &stdout, &stderr); code != 0 || !strings.Contains(stdout.String(), "usage:") {
+		t.Fatalf("code = %d, stdout = %q", code, stdout.String())
+	}
+}
+
+func TestMissingBaseExplainsTheFix(t *testing.T) {
+	repository(t, project())
+	var stdout, stderr bytes.Buffer
+	code := run([]string{"check", "--base", "origin/main"}, &stdout, &stderr)
+	if code != 1 || !strings.Contains(stderr.String(), "fetch-depth: 0") {
+		t.Fatalf("code = %d: %s", code, stderr.String())
+	}
+}
+
+func TestFailureNamesTheFileToEdit(t *testing.T) {
+	git := repository(t, project())
+	write(t, map[string]string{"p/a/code.js": "x"})
+	_, stderr := verdict(t, git)
+	for _, want := range []string{"(p/package.json)", "(p/a/version.toml)", "(version.toml)"} {
+		if !strings.Contains(stderr, want) {
+			t.Errorf("stderr lacks %s: %s", want, stderr)
+		}
+	}
+}
+
+func TestChangelogFailureReachesTheCommand(t *testing.T) {
+	files := project()
+	files["p/a/version.toml"] += "changelog = \"CHANGELOG.md\"\n"
+	git := repository(t, files)
+	write(t, raised())
+	write(t, map[string]string{"p/a/version.toml": tomlVersion("1.0.1") + "changelog = \"CHANGELOG.md\"\n", "p/a/code.js": "x"})
+	code, stderr := verdict(t, git)
+	if code != 1 || !strings.Contains(stderr, "p/a/CHANGELOG.md did not change") {
+		t.Fatalf("code = %d: %s", code, stderr)
+	}
+}

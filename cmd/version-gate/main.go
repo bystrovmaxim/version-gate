@@ -14,6 +14,9 @@ import (
 	"github.com/bystrovmaxim/version-gate/internal/manifest"
 )
 
+// usage is the command's help text.
+const usage = "usage: version-gate --version | check [--base ref]"
+
 // version is the program's version, set at build time for a release.
 var version = "dev"
 
@@ -30,7 +33,11 @@ func run(args []string, stdout, stderr io.Writer) int {
 	if len(args) > 0 && args[0] == "check" {
 		return runCheck(args[1:], stdout, stderr)
 	}
-	fmt.Fprintln(stderr, "usage: version-gate --version | check [--base ref]")
+	if len(args) == 1 && (args[0] == "--help" || args[0] == "-h") {
+		fmt.Fprintln(stdout, usage)
+		return 0
+	}
+	fmt.Fprintln(stderr, usage)
 	return 2
 }
 
@@ -62,7 +69,7 @@ func runCheck(args []string, stdout, stderr io.Writer) int {
 func check(repo gitrepo.Repo, base, head string, stdout io.Writer) ([]string, error) {
 	fork, err := repo.MergeBase(base, head)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("cannot find where this branch left %s; fetch that ref with full history (fetch-depth: 0 in actions/checkout): %w", base, err)
 	}
 	changed, err := repo.Changed(fork, head)
 	if err != nil {
