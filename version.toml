@@ -1,0 +1,6 @@
+kind = "repository"
+version = "0.1.0"
+changelog = "CHANGELOG.md"
+
+[changes]
+ignore = ["**/*.md", "docs/**", "specs/**", ".specify/**", ".claude/**"]
