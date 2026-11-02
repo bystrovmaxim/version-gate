@@ -1,5 +1,9 @@
 # Changelog
 
+## [0.1.1]
+
+version-gate is now published. Each release carries one ready program per system and `checksums.txt`, so CI needs neither Go nor a build, and a GitHub Action downloads the exact release you name, verifies it and runs the check. A published release is never replaced. This is the first release; 0.1.0 was never published.
+
 ## [0.1.0]
 
 version-gate now checks that versions really grow when code changes, for a project in any language. Add a small `version.toml` beside what you want tracked, and run `version-gate check` on pull requests into `main`: if a file changed and a version it belongs to did not go up, the check fails and names the file to edit.
@@ -8,4 +12,4 @@ It works at three sizes: a repository, a package, and a component, which is any 
 
 A pull request cannot talk its way out of the check: the rules are read from `main`, and deleting `version.toml`, hiding a change behind a new ignore pattern, or moving a file between components all still fail.
 
-Two things are yours to set up: require branches to be up to date before merging, and fetch full history in CI. No ready-made program or GitHub Action is published yet, so for now it is built from source.
+Two things are yours to set up: require branches to be up to date before merging, and fetch full history in CI.

@@ -1,0 +1,17 @@
+name: version-gate
+description: Fail a pull request when a version did not grow with the code.
+inputs:
+  version:
+    description: The exact release to run, such as v0.1.1. Defaults to the ref of this action.
+    default: ${{ github.action_ref }}
+  base:
+    description: The ref of main to compare with.
+    default: origin/${{ github.base_ref }}
+runs:
+  using: composite
+  steps:
+    - shell: bash
+      env:
+        VERSION_GATE_TAG: ${{ inputs.version }}
+        VERSION_GATE_BASE: ${{ inputs.base }}
+      run: bash "$GITHUB_ACTION_PATH/scripts/run_release.sh" "$VERSION_GATE_TAG" "$VERSION_GATE_BASE"
