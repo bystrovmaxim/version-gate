@@ -47,10 +47,15 @@ func runCheck(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintln(stderr, "version-gate:", err)
 		return 1
 	}
-	read := func(path string) ([]byte, error) { return repo.Read("HEAD", path) }
+	files, err := repo.Files("HEAD")
+	if err != nil {
+		fmt.Fprintln(stderr, "version-gate:", err)
+		return 1
+	}
+	source := driver.Source{Files: files, Read: func(path string) ([]byte, error) { return repo.Read("HEAD", path) }}
 	for _, r := range requirements {
 		level, _ := head.Level(r.Dir)
-		number, err := driver.Version(level, read)
+		number, err := driver.Version(level, source)
 		if err != nil {
 			fmt.Fprintln(stderr, "version-gate:", err)
 			return 1

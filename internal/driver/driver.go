@@ -6,16 +6,21 @@ import (
 	"errors"
 	"fmt"
 	"path"
+	"regexp"
 	"slices"
 	"strings"
 
 	"github.com/BurntSushi/toml"
+	"go.yaml.in/yaml/v3"
 
 	"github.com/bystrovmaxim/version-gate/internal/manifest"
 )
 
-// Reader returns a file's content by its path from the repository root.
-type Reader func(path string) ([]byte, error)
+// Source gives drivers access to the repository at one revision.
+type Source struct {
+	Files []string
+	Read  func(path string) ([]byte, error)
+}
 
 // definition is what one driver knows about its language.
 type definition struct {
@@ -30,10 +35,16 @@ var definitions = map[string]definition{
 	"rust":   {"Cargo.toml", "package.version", "semver", decodeTOML},
 	"node":   {"package.json", "version", "semver", decodeJSON},
 	"php":    {"composer.json", "version", "semver", decodeJSON},
+	"dart":   {"pubspec.yaml", "version", "semver", decodeYAML},
+	"gradle": {"gradle.properties", "version", "maven", decodeProperties},
+	"ruby":   {"lib/**/version.rb", "VERSION", "rubygems", decodeRuby},
 }
 
+// rubyConstant matches a string constant such as VERSION = "1.2.0".
+var rubyConstant = regexp.MustCompile(`(?m)^\s*([A-Z][A-Za-z0-9_]*)\s*=\s*["']([^"']+)["']`)
+
 // Version returns the level's number, from its driver or written directly.
-func Version(level manifest.Level, read Reader) (string, error) {
+func Version(level manifest.Level, source Source) (string, error) {
 	m := level.Manifest
 	if m.Driver == "" {
 		return m.Version, nil
@@ -42,9 +53,12 @@ func Version(level manifest.Level, read Reader) (string, error) {
 	if !ok {
 		return "", fmt.Errorf("driver %q is not supported yet", m.Driver)
 	}
-	file := path.Join(level.Dir, orDefault(m.File, def.file))
+	file, err := locate(path.Join(level.Dir, orDefault(m.File, def.file)), source.Files)
+	if err != nil {
+		return "", err
+	}
 	key := orDefault(m.Key, def.key)
-	values, err := load(file, def, read)
+	values, err := load(file, def, source)
 	if err != nil {
 		return "", err
 	}
@@ -56,7 +70,7 @@ func Version(level manifest.Level, read Reader) (string, error) {
 		return version, nil
 	}
 	if m.Driver == "rust" && inheritsWorkspace(value) {
-		return workspaceVersion(level.Dir, def, read)
+		return workspaceVersion(level.Dir, def, source)
 	}
 	return "", fmt.Errorf("%s: key %s is not a version string", file, key)
 }
@@ -77,9 +91,28 @@ func orDefault(override, fallback string) string {
 	return fallback
 }
 
+// locate resolves a path with ** to the one tracked file that matches it.
+func locate(pattern string, files []string) (string, error) {
+	prefix, _, wild := strings.Cut(pattern, "**")
+	if !wild {
+		return pattern, nil
+	}
+	name := path.Base(pattern)
+	var matches []string
+	for _, file := range files {
+		if strings.HasPrefix(file, prefix) && path.Base(file) == name {
+			matches = append(matches, file)
+		}
+	}
+	if len(matches) != 1 {
+		return "", fmt.Errorf("%s matches %d files, want 1; name the file with file", pattern, len(matches))
+	}
+	return matches[0], nil
+}
+
 // load reads and decodes one file.
-func load(file string, def definition, read Reader) (map[string]any, error) {
-	data, err := read(file)
+func load(file string, def definition, source Source) (map[string]any, error) {
+	data, err := source.Read(file)
 	if err != nil {
 		return nil, fmt.Errorf("%s: cannot read: %w", file, err)
 	}
@@ -92,6 +125,9 @@ func load(file string, def definition, read Reader) (map[string]any, error) {
 
 // lookup follows a dotted key through nested tables.
 func lookup(values map[string]any, key string) (any, bool) {
+	if value, ok := values[key]; ok {
+		return value, true
+	}
 	var current any = values
 	for _, part := range strings.Split(key, ".") {
 		table, ok := current.(map[string]any)
@@ -124,10 +160,10 @@ func inheritsWorkspace(value any) bool {
 }
 
 // workspaceVersion finds the version in the nearest Cargo.toml above dir that declares one.
-func workspaceVersion(dir string, def definition, read Reader) (string, error) {
+func workspaceVersion(dir string, def definition, source Source) (string, error) {
 	for current := dir; current != "."; {
 		current = path.Dir(current)
-		values, err := load(path.Join(current, def.file), def, read)
+		values, err := load(path.Join(current, def.file), def, source)
 		if err != nil {
 			continue
 		}
@@ -152,4 +188,31 @@ func decodeJSON(data []byte) (map[string]any, error) {
 	values := map[string]any{}
 	err := json.Unmarshal(data, &values)
 	return values, err
+}
+
+// decodeYAML parses a YAML mapping.
+func decodeYAML(data []byte) (map[string]any, error) {
+	values := map[string]any{}
+	err := yaml.Unmarshal(data, &values)
+	return values, err
+}
+
+// decodeProperties parses a Java properties file; a comment yields a key nobody asks for.
+func decodeProperties(data []byte) (map[string]any, error) {
+	values := map[string]any{}
+	for _, line := range strings.Split(string(data), "\n") {
+		if i := strings.IndexAny(line, "=:"); i > 0 {
+			values[strings.TrimSpace(line[:i])] = strings.TrimSpace(line[i+1:])
+		}
+	}
+	return values, nil
+}
+
+// decodeRuby collects the string constants of a Ruby file without running it.
+func decodeRuby(data []byte) (map[string]any, error) {
+	values := map[string]any{}
+	for _, match := range rubyConstant.FindAllSubmatch(data, -1) {
+		values[string(match[1])] = string(match[2])
+	}
+	return values, nil
 }
