@@ -1,0 +1,4 @@
+kind = "package"
+driver = "node"
+file = "app/package.json"
+key = "version"

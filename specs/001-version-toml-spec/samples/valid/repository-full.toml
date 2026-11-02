@@ -1,0 +1,10 @@
+kind = "repository"
+driver = "python"
+require_bump = false
+untracked = ["packages/maxitor/web/client"]
+
+[changes]
+ignore = ["**/*.md", "**/tests/**"]
+
+[setup]
+note = "reserved, ignored by the tool"
