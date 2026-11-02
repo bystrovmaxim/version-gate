@@ -93,18 +93,22 @@ func TestComponentInsideComponentFails(t *testing.T) {
 }
 
 func TestStandardFileNeedsVersionToml(t *testing.T) {
-	_, err := discover(map[string]string{"version.toml": root, "a/pyproject.toml": ""})
+	tree, err := discover(map[string]string{"version.toml": root, "a/pyproject.toml": ""})
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = tree.CheckStandardFiles([]string{"version.toml", "a/pyproject.toml"}, nil)
 	if err == nil || !strings.Contains(err.Error(), "a/pyproject.toml") {
 		t.Fatalf("err = %v", err)
 	}
 }
 
 func TestUntrackedFreesTheFolderAndHidesNothing(t *testing.T) {
-	tree, err := discover(map[string]string{
-		"version.toml":     root + "untracked = [\"a\"]\n",
-		"a/pyproject.toml": "",
-	})
+	tree, err := discover(map[string]string{"version.toml": root, "a/pyproject.toml": ""})
 	if err != nil {
+		t.Fatal(err)
+	}
+	if err := tree.CheckStandardFiles([]string{"a/pyproject.toml"}, []string{"a"}); err != nil {
 		t.Fatal(err)
 	}
 	if got := len(tree.Owners("a/pyproject.toml")); got != 1 {

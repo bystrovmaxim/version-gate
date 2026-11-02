@@ -52,9 +52,6 @@ func Discover(files []string, read func(string) ([]byte, error)) (*Tree, error) 
 	if err := tree.checkNesting(); err != nil {
 		return nil, err
 	}
-	if err := tree.checkStandardFiles(files); err != nil {
-		return nil, err
-	}
 	return tree, nil
 }
 
@@ -73,14 +70,8 @@ func (t *Tree) checkNesting() error {
 	return nil
 }
 
-// checkStandardFiles refuses a package file with no version.toml beside it.
-func (t *Tree) checkStandardFiles(files []string) error {
-	var untracked []string
-	for _, level := range t.Levels {
-		if level.Dir == "." {
-			untracked = level.Manifest.Untracked
-		}
-	}
+// CheckStandardFiles refuses a package file with no version.toml beside it.
+func (t *Tree) CheckStandardFiles(files, untracked []string) error {
 	for _, file := range files {
 		dir := path.Dir(file)
 		if !isStandardFile(path.Base(file)) || t.has(dir) || slices.Contains(untracked, dir) {
@@ -91,9 +82,27 @@ func (t *Tree) checkStandardFiles(files []string) error {
 	return nil
 }
 
+// Root returns the repository's root file, or nil when it has none.
+func (t *Tree) Root() *Manifest {
+	if level, ok := t.Level("."); ok {
+		return level.Manifest
+	}
+	return nil
+}
+
+// Level returns the level declared in dir.
+func (t *Tree) Level(dir string) (Level, bool) {
+	i := slices.IndexFunc(t.Levels, func(l Level) bool { return l.Dir == dir })
+	if i < 0 {
+		return Level{}, false
+	}
+	return t.Levels[i], true
+}
+
 // has reports whether dir is a level.
 func (t *Tree) has(dir string) bool {
-	return slices.ContainsFunc(t.Levels, func(l Level) bool { return l.Dir == dir })
+	_, ok := t.Level(dir)
+	return ok
 }
 
 // Owners returns every level a file belongs to, outermost first.
