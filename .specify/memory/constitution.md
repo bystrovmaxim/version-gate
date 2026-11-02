@@ -61,7 +61,8 @@ specification.
   pull request per branch.
 - One phase is one commit.
 - Commit messages, pull requests, issues and comments MUST NOT carry the line
-  "🤖 Generated with Claude Code" or any variant of it.
+  "🤖 Generated with Claude Code" or any variant of it, nor a `Co-Authored-By` line naming an
+  AI tool.
 - Documentation ships with the change it describes.
 - The tool's own versions obey the rules it enforces.
 
@@ -78,4 +79,4 @@ This constitution overrides every other practice in the repository. Only the mai
 Versions follow semver: MAJOR removes or redefines a principle, MINOR adds one or materially expands
 it, PATCH refines wording. Every plan and pull request is checked against it.
 
-**Version**: 1.1.0 | **Ratified**: 2026-11-02 | **Last Amended**: 2026-11-02
+**Version**: 1.2.0 | **Ratified**: 2026-11-02 | **Last Amended**: 2026-11-02
