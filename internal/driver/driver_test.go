@@ -43,6 +43,12 @@ func TestVersion(t *testing.T) {
 		{"ruby at the root", level(".", "ruby", "", ""), map[string]string{"lib/gem/version.rb": "VERSION = '1.2.8'\n"}, "1.2.8"},
 		{"gradle comment", level("p", "gradle", "", ""), map[string]string{"p/gradle.properties": "#version=9.9.9\n! version=9.9.9\nversion=1.2.9\n"}, "1.2.9"},
 		{"ruby in another folder", level("p", "ruby", "", ""), map[string]string{"p/lib/version.rb": "VERSION = '1.3.0'\n", "q/lib/version.rb": "VERSION = '9.9.9'\n"}, "1.3.0"},
+		{"maven", level("p", "maven", "", ""), map[string]string{"p/pom.xml": `<project xmlns="http://maven.apache.org/POM/4.0.0"><parent><version>9.0</version></parent><version>1.4.0</version></project>`}, "1.4.0"},
+		{"maven parent", level("p", "maven", "", ""), map[string]string{"p/pom.xml": `<project><parent><version>1.4.1</version></parent></project>`}, "1.4.1"},
+		{"maven comment", level("p", "maven", "", ""), map[string]string{"p/pom.xml": `<project><!-- <version>9</version> --><version> 1.4.2 </version></project>`}, "1.4.2"},
+		{"dotnet", level("p", "dotnet", "", ""), map[string]string{"p/App.csproj": "\ufeff<Project><PropertyGroup><Nullable>enable</Nullable></PropertyGroup><PropertyGroup><Version>1.5.0</Version></PropertyGroup></Project>", "q/Other.csproj": "", "p/sub/Deep.csproj": ""}, "1.5.0"},
+		{"dotnet first group", level("p", "dotnet", "", ""), map[string]string{"p/A.csproj": `<Project><PropertyGroup><Version>1.5.2</Version></PropertyGroup><PropertyGroup><Nullable>enable</Nullable></PropertyGroup></Project>`}, "1.5.2"},
+		{"dotnet at the root", level(".", "dotnet", "", ""), map[string]string{"App.csproj": `<Project><PropertyGroup><Version>1.5.1</Version></PropertyGroup></Project>`}, "1.5.1"},
 		{"file and key", level("p", "node", "app/meta.json", "build.version"), map[string]string{"p/app/meta.json": `{"build": {"version": "2.0.0"}}`}, "2.0.0"},
 		{"rust workspace", level("crates/a", "rust", "", ""), map[string]string{
 			"crates/a/Cargo.toml": "[package]\nversion.workspace = true\n",
@@ -82,7 +88,13 @@ func TestVersionFailures(t *testing.T) {
 		{"ruby two files", level("p", "ruby", "", ""), map[string]string{"p/lib/a/version.rb": "", "p/lib/b/version.rb": ""}, "matches 2 files"},
 		{"ruby computed", level("p", "ruby", "", ""), map[string]string{"p/lib/version.rb": "VERSION = compute()\n"}, "key VERSION is missing"},
 		{"ruby commented out", level("p", "ruby", "", ""), map[string]string{"p/lib/version.rb": "# VERSION = \"1.0\"\n"}, "key VERSION is missing"},
-		{"later driver", level("p", "maven", "", ""), nil, "not supported yet"},
+		{"maven property", level("p", "maven", "", ""), map[string]string{"p/pom.xml": `<project><version>${revision}</version></project>`}, "computed"},
+		{"maven nothing", level("p", "maven", "", ""), map[string]string{"p/pom.xml": `<project></project>`}, "key project/version is missing"},
+		{"maven broken", level("p", "maven", "", ""), map[string]string{"p/pom.xml": `<project>`}, "p/pom.xml"},
+		{"dotnet property", level("p", "dotnet", "", ""), map[string]string{"p/A.csproj": `<Project><PropertyGroup><Version>$(Base)</Version></PropertyGroup></Project>`}, "computed"},
+		{"dotnet two projects", level("p", "dotnet", "", ""), map[string]string{"p/A.csproj": "", "p/B.csproj": ""}, "matches 2 files"},
+		{"dotnet no version", level("p", "dotnet", "", ""), map[string]string{"p/A.csproj": `<Project><PropertyGroup/></Project>`}, "is missing"},
+		{"unknown driver", level("p", "cobol", "", ""), nil, "not supported yet"},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
@@ -95,7 +107,7 @@ func TestVersionFailures(t *testing.T) {
 }
 
 func TestScheme(t *testing.T) {
-	for name, want := range map[string]string{"python": "pep440", "rust": "semver", "node": "semver", "php": "semver", "dart": "semver", "gradle": "maven", "ruby": "rubygems"} {
+	for name, want := range map[string]string{"python": "pep440", "rust": "semver", "node": "semver", "php": "semver", "dart": "semver", "gradle": "maven", "ruby": "rubygems", "maven": "maven", "dotnet": "nuget"} {
 		if got, err := Scheme(name); err != nil || got != want {
 			t.Errorf("Scheme(%s) = %q, %v", name, got, err)
 		}

@@ -3,8 +3,10 @@ package driver
 
 import (
 	"encoding/json"
+	"encoding/xml"
 	"errors"
 	"fmt"
+	"io"
 	"path"
 	"regexp"
 	"slices"
@@ -38,6 +40,8 @@ var definitions = map[string]definition{
 	"dart":   {"pubspec.yaml", "version", "semver", decodeYAML},
 	"gradle": {"gradle.properties", "version", "maven", decodeProperties},
 	"ruby":   {"lib/**/version.rb", "VERSION", "rubygems", decodeRuby},
+	"maven":  {"pom.xml", "project/version", "maven", decodeXML},
+	"dotnet": {"*.csproj", "Project/PropertyGroup/Version", "nuget", decodeXML},
 }
 
 // rubyConstant matches a string constant such as VERSION = "1.2.0".
@@ -63,10 +67,16 @@ func Version(level manifest.Level, source Source) (string, error) {
 		return "", err
 	}
 	value, found := lookup(values, key)
+	if !found && m.Driver == "maven" && m.Key == "" {
+		value, found = lookup(values, "project/parent/version")
+	}
 	if !found {
 		return "", missing(m, file, key, values)
 	}
 	if version, ok := value.(string); ok && version != "" {
+		if strings.Contains(version, "${") || strings.Contains(version, "$(") {
+			return "", fmt.Errorf("%s: the version %s is computed; write version directly in %s", file, version, manifest.FileName)
+		}
 		return version, nil
 	}
 	if m.Driver == "rust" && inheritsWorkspace(value) {
@@ -91,16 +101,19 @@ func orDefault(override, fallback string) string {
 	return fallback
 }
 
-// locate resolves a path with ** to the one tracked file that matches it.
+// locate resolves a path with * or ** to the one tracked file that matches it.
 func locate(pattern string, files []string) (string, error) {
-	prefix, _, wild := strings.Cut(pattern, "**")
-	if !wild {
+	if !strings.Contains(pattern, "*") {
 		return pattern, nil
 	}
-	name := path.Base(pattern)
+	prefix, _, deep := strings.Cut(pattern, "**")
 	var matches []string
 	for _, file := range files {
-		if strings.HasPrefix(file, prefix) && path.Base(file) == name {
+		matched := strings.HasPrefix(file, prefix) && path.Base(file) == path.Base(pattern)
+		if !deep {
+			matched, _ = path.Match(pattern, file)
+		}
+		if matched {
 			matches = append(matches, file)
 		}
 	}
@@ -123,22 +136,36 @@ func load(file string, def definition, source Source) (map[string]any, error) {
 	return values, nil
 }
 
-// lookup follows a dotted key through nested tables.
+// lookup follows a key with . or / through nested tables.
 func lookup(values map[string]any, key string) (any, bool) {
 	if value, ok := values[key]; ok {
 		return value, true
 	}
-	var current any = values
-	for _, part := range strings.Split(key, ".") {
-		table, ok := current.(map[string]any)
-		if !ok {
-			return nil, false
+	separator := "."
+	if strings.Contains(key, "/") {
+		separator = "/"
+	}
+	return descend(values, strings.Split(key, separator))
+}
+
+// descend follows a key's parts; a repeated element is searched in order.
+func descend(current any, parts []string) (any, bool) {
+	if len(parts) == 0 {
+		return current, true
+	}
+	switch node := current.(type) {
+	case map[string]any:
+		if next, ok := node[parts[0]]; ok {
+			return descend(next, parts[1:])
 		}
-		if current, ok = table[part]; !ok {
-			return nil, false
+	case []any:
+		for _, item := range node {
+			if value, ok := descend(item, parts); ok {
+				return value, true
+			}
 		}
 	}
-	return current, true
+	return nil, false
 }
 
 // missing explains an absent key, naming the case of a computed Python version.
@@ -215,4 +242,65 @@ func decodeRuby(data []byte) (map[string]any, error) {
 		values[string(match[1])] = string(match[2])
 	}
 	return values, nil
+}
+
+// decodeXML parses an XML document into nested tables keyed by local element names.
+func decodeXML(data []byte) (map[string]any, error) {
+	decoder := xml.NewDecoder(strings.NewReader(string(data)))
+	values := map[string]any{}
+	for {
+		token, err := decoder.Token()
+		if err == io.EOF {
+			return values, nil
+		}
+		if err != nil {
+			return nil, err
+		}
+		if start, ok := token.(xml.StartElement); ok {
+			value, err := decodeElement(decoder)
+			if err != nil {
+				return nil, err
+			}
+			addElement(values, start.Name.Local, value)
+		}
+	}
+}
+
+// decodeElement reads one element's content: a table if it has children, else its text.
+func decodeElement(decoder *xml.Decoder) (any, error) {
+	children := map[string]any{}
+	var text strings.Builder
+	for {
+		token, err := decoder.Token()
+		if err != nil {
+			return nil, err
+		}
+		switch t := token.(type) {
+		case xml.StartElement:
+			value, err := decodeElement(decoder)
+			if err != nil {
+				return nil, err
+			}
+			addElement(children, t.Name.Local, value)
+		case xml.CharData:
+			text.Write(t)
+		case xml.EndElement:
+			if len(children) > 0 {
+				return children, nil
+			}
+			return strings.TrimSpace(text.String()), nil
+		}
+	}
+}
+
+// addElement stores a child, keeping repeated names as a list in document order.
+func addElement(table map[string]any, name string, value any) {
+	switch existing := table[name].(type) {
+	case nil:
+		table[name] = value
+	case []any:
+		table[name] = append(existing, value)
+	default:
+		table[name] = []any{existing, value}
+	}
 }
