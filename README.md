@@ -90,12 +90,10 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-      - uses: actions/setup-go@v5
-        with:
-          go-version: '1.27.3'
-      - run: go install github.com/bystrovmaxim/version-gate/cmd/version-gate@latest
-      - run: version-gate check --base "origin/$GITHUB_BASE_REF"
+      - uses: bystrovmaxim/version-gate@v0.1.1
 ```
+
+The action downloads that exact release, verifies its checksum and runs the check, so your CI needs no Go. In another CI, download the program for your system and `checksums.txt` from [Releases](https://github.com/bystrovmaxim/version-gate/releases).
 
 Make the `version` job a required check in your branch protection or ruleset, and require branches to be up to date before merging. A result can become stale when another pull request updates the version on `main`.
 
