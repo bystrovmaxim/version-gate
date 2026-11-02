@@ -8,8 +8,11 @@ import (
 
 // compareFuncs maps a scheme's name to its comparison.
 var compareFuncs = map[string]func(a, b string) (int, error){
-	"semver": compareSemver,
-	"pep440": comparePEP440,
+	"semver":   compareSemver,
+	"pep440":   comparePEP440,
+	"maven":    compareMaven,
+	"nuget":    compareNuGet,
+	"rubygems": compareGems,
 }
 
 // Compare returns a negative number, zero or a positive number as a is below, equal to or above b.

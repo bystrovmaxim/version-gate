@@ -65,10 +65,65 @@ func TestPEP440Spellings(t *testing.T) {
 	}
 }
 
+func TestMavenOrder(t *testing.T) {
+	ascending(t, "maven", []string{
+		"1.0-alpha-1", "1.0-alpha-2", "1.0-beta-1", "1.0-milestone-1", "1.0-rc1", "1.0-SNAPSHOT",
+		"1.0", "1.0-sp1", "1.0-foo", "1.0-zebra", "1.0.0.1", "1.0.1", "1.1", "1.10", "2",
+	})
+}
+
+func TestMavenSpellings(t *testing.T) {
+	for _, pair := range [][2]string{
+		{"1.0", "1"}, {"1.0.0", "1"}, {"1-ga", "1"}, {"1.0.Final", "1"}, {"1-release", "1"},
+		{"1.0-CR1", "1.0-rc1"}, {"1-a1", "1-alpha-1"}, {"1-b2", "1-beta-2"}, {"1-m3", "1-milestone-3"},
+	} {
+		if got, err := Compare("maven", pair[0], pair[1]); err != nil || got != 0 {
+			t.Errorf("compare(%s, %s) = %d, %v", pair[0], pair[1], got, err)
+		}
+	}
+}
+
+func TestNuGetOrder(t *testing.T) {
+	ascending(t, "nuget", []string{
+		"0.9", "1.0.0-alpha", "1.0.0-alpha.2", "1.0.0-alpha.10", "1.0.0-beta", "1.0.0",
+		"1.0.0.1", "1.0.1", "1.1", "2.0.0.0",
+	})
+}
+
+func TestNuGetSpellings(t *testing.T) {
+	for _, pair := range [][2]string{
+		{"1.0", "1.0.0"}, {"1.0.0.0", "1.0.0"}, {"1", "1.0.0"}, {"1.00.0", "1.0.0"},
+		{"1.0.0-RC", "1.0.0-rc"}, {"1.0.0+a", "1.0.0+b"},
+	} {
+		if got, err := Compare("nuget", pair[0], pair[1]); err != nil || got != 0 {
+			t.Errorf("compare(%s, %s) = %d, %v", pair[0], pair[1], got, err)
+		}
+	}
+}
+
+func TestRubyGemsOrder(t *testing.T) {
+	ascending(t, "rubygems", []string{
+		"0.9", "1.0.a", "1.0.a.2", "1.0.a.10", "1.0.b1", "1.0.rc1", "1.0", "1.0.1", "1.1", "1.10", "2",
+	})
+}
+
+func TestRubyGemsSpellings(t *testing.T) {
+	for _, pair := range [][2]string{
+		{"1.0", "1"}, {"1.0.0", "1"}, {"1.0.0.a", "1.a"}, {"1.0-1", "1.0.pre.1"}, {" 1.0 ", "1"},
+	} {
+		if got, err := Compare("rubygems", pair[0], pair[1]); err != nil || got != 0 {
+			t.Errorf("compare(%s, %s) = %d, %v", pair[0], pair[1], got, err)
+		}
+	}
+}
+
 func TestInvalidNumbers(t *testing.T) {
 	cases := map[string][]string{
-		"semver": {"", "one", "1", "1.2", "v1.2.3", "01.2.3", "1.2.3-", "1.2.3-01", "1.2.3+", "1.2.3.4"},
-		"pep440": {"", "one", "1.0-", "1..0", "1.0+", "1.0gamma1"},
+		"semver":   {"", "one", "1", "1.2", "v1.2.3", "01.2.3", "1.2.3-", "1.2.3-01", "1.2.3+", "1.2.3.4"},
+		"pep440":   {"", "one", "1.0-", "1..0", "1.0+", "1.0gamma1"},
+		"maven":    {"", "-1", "1.0 beta", "${revision}"},
+		"nuget":    {"", "one", "1.2.3.4.5", "v1.0", "1.0-", "1.0+"},
+		"rubygems": {"", "one", "1..0", "1.0-", "a.1"},
 	}
 	for name, numbers := range cases {
 		for _, number := range numbers {
