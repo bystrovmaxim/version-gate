@@ -8,6 +8,7 @@ import (
 	"os"
 
 	"github.com/bystrovmaxim/version-gate/internal/change"
+	"github.com/bystrovmaxim/version-gate/internal/driver"
 	"github.com/bystrovmaxim/version-gate/internal/gitrepo"
 	"github.com/bystrovmaxim/version-gate/internal/manifest"
 )
@@ -40,43 +41,52 @@ func runCheck(args []string, stdout, stderr io.Writer) int {
 	if err := flags.Parse(args); err != nil {
 		return 2
 	}
-	requirements, err := required(gitrepo.Repo{Dir: "."}, *baseRef, "HEAD", stdout)
+	repo := gitrepo.Repo{Dir: "."}
+	requirements, head, err := required(repo, *baseRef, "HEAD", stdout)
 	if err != nil {
 		fmt.Fprintln(stderr, "version-gate:", err)
 		return 1
 	}
+	read := func(path string) ([]byte, error) { return repo.Read("HEAD", path) }
 	for _, r := range requirements {
+		level, _ := head.Level(r.Dir)
+		number, err := driver.Version(level, read)
+		if err != nil {
+			fmt.Fprintln(stderr, "version-gate:", err)
+			return 1
+		}
 		note := ""
 		if r.New {
-			note = " (new)"
+			note = ", new"
 		}
-		fmt.Fprintf(stdout, "must grow: %s %s%s\n", r.Kind, r.Dir, note)
+		fmt.Fprintf(stdout, "must grow: %s %s (now %s%s)\n", r.Kind, r.Dir, number, note)
 	}
 	return 0
 }
 
 // required reads both revisions, prints the tracked levels and works out what must grow.
-func required(repo gitrepo.Repo, base, head string, stdout io.Writer) ([]change.Requirement, error) {
+func required(repo gitrepo.Repo, base, head string, stdout io.Writer) ([]change.Requirement, *manifest.Tree, error) {
 	fork, err := repo.MergeBase(base, head)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	changed, err := repo.Changed(fork, head)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	baseTree, _, err := readTree(repo, base)
 	if err != nil {
-		return nil, fmt.Errorf("%s: %w", base, err)
+		return nil, nil, fmt.Errorf("%s: %w", base, err)
 	}
 	headTree, headFiles, err := readTree(repo, head)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	for _, level := range headTree.Levels {
 		fmt.Fprintf(stdout, "tracked: %s %s\n", level.Manifest.Kind, level.Dir)
 	}
-	return change.Required(change.Input{Base: baseTree, Head: headTree, HeadFiles: headFiles, Changed: changed})
+	requirements, err := change.Required(change.Input{Base: baseTree, Head: headTree, HeadFiles: headFiles, Changed: changed})
+	return requirements, headTree, err
 }
 
 // readTree works out the levels at rev.

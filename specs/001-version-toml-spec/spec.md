@@ -109,7 +109,7 @@ A level that names a `changelog` cannot raise its version without an entry.
 
 - **FR-020**: Required levels are worked out from both `main` and the pull request; a level on `main` stays bound.
 - **FR-021**: Deleting `version.toml` from a folder that keeps other files MUST fail if the pull request also changes those files.
-- **FR-022**: `changes.ignore` and `untracked` are read from `main`.
+- **FR-022**: `changes.ignore`, `untracked` and `require_bump` are read from `main`.
 - **FR-023**: A level absent on `main` is new; any valid number passes. With no root file on `main`, the tool only validates.
 
 **Changelog**
