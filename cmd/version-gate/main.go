@@ -85,7 +85,7 @@ func check(repo gitrepo.Repo, base, head string, stdout io.Writer) ([]string, er
 	if err != nil {
 		return nil, err
 	}
-	return gate.Check(requirements, baseState, headState), nil
+	return gate.Check(requirements, changed, baseState, headState), nil
 }
 
 // readState works out the levels and files at rev.

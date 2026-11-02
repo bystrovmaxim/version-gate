@@ -18,18 +18,19 @@ type State struct {
 }
 
 // Check returns one message for every requirement that is not met.
-func Check(requirements []change.Requirement, base, head State) []string {
+func Check(requirements []change.Requirement, changed []string, base, head State) []string {
 	var failures []string
 	for _, r := range requirements {
-		if err := checkLevel(r, base, head); err != nil {
-			failures = append(failures, fmt.Sprintf("%s %s: %v", r.Kind, r.Dir, err))
+		if err := checkLevel(r, changed, base, head); err != nil {
+			level, _ := head.Tree.Level(r.Dir)
+			failures = append(failures, fmt.Sprintf("%s %s (%s): %v", r.Kind, r.Dir, driver.Location(level, head.Source), err))
 		}
 	}
 	return failures
 }
 
 // checkLevel judges one level.
-func checkLevel(r change.Requirement, base, head State) error {
+func checkLevel(r change.Requirement, changed []string, base, head State) error {
 	level, _ := head.Tree.Level(r.Dir)
 	number, err := driver.Version(level, head.Source)
 	if err != nil {
@@ -57,7 +58,7 @@ func checkLevel(r change.Requirement, base, head State) error {
 	if order <= 0 {
 		return fmt.Errorf("version %s did not grow; main has %s, raise it above that", number, before)
 	}
-	return nil
+	return checkChangelog(level, number, changed, head.Source)
 }
 
 // schemeOf finds a level's scheme: its driver, the nearest driver above, the root's scheme, or semver.

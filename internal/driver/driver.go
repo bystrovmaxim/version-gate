@@ -85,6 +85,19 @@ func Version(level manifest.Level, source Source) (string, error) {
 	return "", fmt.Errorf("%s: key %s is not a version string", file, key)
 }
 
+// Location names the file a level's number is edited in.
+func Location(level manifest.Level, source Source) string {
+	def, ok := definitions[level.Manifest.Driver]
+	if !ok {
+		return path.Join(level.Dir, manifest.FileName)
+	}
+	pattern := path.Join(level.Dir, orDefault(level.Manifest.File, def.file))
+	if file, err := locate(pattern, source.Files); err == nil {
+		return file
+	}
+	return pattern
+}
+
 // Scheme returns the comparison scheme of a driver.
 func Scheme(name string) (string, error) {
 	if def, ok := definitions[name]; ok {

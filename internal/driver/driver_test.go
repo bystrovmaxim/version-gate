@@ -113,3 +113,20 @@ func TestScheme(t *testing.T) {
 		}
 	}
 }
+
+func TestLocation(t *testing.T) {
+	cases := []struct {
+		level manifest.Level
+		want  string
+	}{
+		{level("p", "node", "", ""), "p/package.json"},
+		{level("p", "ruby", "", ""), "p/lib/x/version.rb"},
+		{manifest.Level{Dir: "c", Manifest: &manifest.Manifest{Version: "1.0.0"}}, "c/version.toml"},
+	}
+	for _, c := range cases {
+		s := source(map[string]string{"p/lib/x/version.rb": ""})
+		if got := Location(c.level, s); got != c.want {
+			t.Errorf("Location = %q, want %q", got, c.want)
+		}
+	}
+}

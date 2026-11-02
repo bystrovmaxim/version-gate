@@ -2,9 +2,11 @@ package gate
 
 import (
 	"os"
+	"strings"
 	"testing"
 
 	"github.com/bystrovmaxim/version-gate/internal/change"
+	"github.com/bystrovmaxim/version-gate/internal/driver"
 	"github.com/bystrovmaxim/version-gate/internal/manifest"
 )
 
@@ -54,8 +56,50 @@ func TestBadVersionSampleFails(t *testing.T) {
 		t.Fatal(err)
 	}
 	level := manifest.Level{Dir: "c", Manifest: parse(t, data, false)}
-	failures := Check([]change.Requirement{{Dir: "c", Kind: "component", New: true}}, State{Tree: tree()}, State{Tree: tree(level)})
+	failures := Check([]change.Requirement{{Dir: "c", Kind: "component", New: true}}, nil, State{Tree: tree()}, State{Tree: tree(level)})
 	if len(failures) != 1 {
 		t.Fatalf("failures = %v", failures)
+	}
+}
+
+func changelogLevel() manifest.Level {
+	return manifest.Level{Dir: "p", Manifest: &manifest.Manifest{Kind: "package", Version: "1.1.0", Changelog: "CHANGELOG.md"}}
+}
+
+func TestChangelog(t *testing.T) {
+	const file = "p/CHANGELOG.md"
+	cases := []struct {
+		name    string
+		text    string
+		changed []string
+		want    string
+	}{
+		{"new version on top", "# Changelog\n\n## [1.1.0] - 2026-01-01\n- x\n\n## [1.0.0]\n", []string{file}, ""},
+		{"filled unreleased", "## [Unreleased]\n### Added\n- x\n\n## [1.0.0]\n", []string{file}, ""},
+		{"no brackets", "## 1.1.0\n", []string{file}, ""},
+		{"not changed", "## [Unreleased]\n- x\n", nil, "did not change"},
+		{"empty unreleased", "## [Unreleased]\n\n### Added\n\n## [1.0.0]\n- old\n", []string{file}, "is empty"},
+		{"old version on top", "## [1.0.0]\n- x\n", []string{file}, "top section is 1.0.0"},
+		{"no sections", "# Changelog\n", []string{file}, "no section found"},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			source := driver.Source{Read: func(string) ([]byte, error) { return []byte(c.text), nil }}
+			err := checkChangelog(changelogLevel(), "1.1.0", c.changed, source)
+			if c.want == "" && err != nil {
+				t.Fatal(err)
+			}
+			if c.want != "" && (err == nil || !strings.Contains(err.Error(), c.want)) {
+				t.Fatalf("err = %v, want %q", err, c.want)
+			}
+		})
+	}
+}
+
+func TestLevelWithoutChangelogIsNotChecked(t *testing.T) {
+	level := changelogLevel()
+	level.Manifest.Changelog = ""
+	if err := checkChangelog(level, "1.1.0", nil, driver.Source{}); err != nil {
+		t.Fatal(err)
 	}
 }
